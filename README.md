@@ -5,91 +5,111 @@ Adapted for **Chicago, USA** timezone with the **Zen kernel**.
 
 ---
 
-## Prerequisites
+## Quick Start
 
 1. Boot from the latest Arch Linux ISO
 2. Verify internet connectivity: `ping archlinux.org`
 3. If using WiFi: `iwctl` to connect
-4. Download these scripts or copy them to the live environment
+4. Download and run the installer:
+
+```bash
+# Clone or download the repository
+git clone https://github.com/yourusername/arch-install.git
+cd arch-install
+
+# Run the unified installer
+chmod +x install.sh
+./install.sh
+```
+
+The installer will guide you through all phases automatically. You only need to run `./install.sh` at each phase:
+- **Phase 1**: Initial setup (from Live ISO)
+- **Phase 2**: Secure Boot configuration (after first reboot and BIOS setup)
+- **Phase 3**: TPM2 setup (after second reboot)
 
 ---
 
-## Installation Steps
+## Detailed Installation Steps
 
 ### Phase 1: From Arch Live ISO
 
-Run these scripts **in order** while booted from the Arch ISO:
+Run the installer while booted from the Arch ISO:
 
 ```bash
-# 1. Prepare disk partitions and encryption
-chmod +x 01-disk-preparation.sh
-./01-disk-preparation.sh
-
-# 2. Install base system (USA mirrors, Zen kernel)
-chmod +x 02-base-install.sh
-./02-base-install.sh
-
-# 3. Create your user account
-chmod +x 03-user-setup.sh
-./03-user-setup.sh
-
-# 4. Configure Unified Kernel Images
-chmod +x 04-kernel-setup.sh
-./04-kernel-setup.sh
-
-# 5. Install bootloader and enable services
-chmod +x 05-bootloader.sh
-./05-bootloader.sh
+./install.sh
 ```
 
-After script 5 completes:
-```bash
-sync
-systemctl reboot --firmware-setup
-```
+This will automatically execute scripts 01-05:
+1. Disk preparation and LUKS encryption
+2. Base system installation (USA mirrors, Zen kernel)
+3. User account creation
+4. Unified Kernel Image configuration
+5. Bootloader and services setup
+
+**After Phase 1 completes**, the installer will prompt you to:
+1. Run: `sync && systemctl reboot --firmware-setup`
+2. In UEFI/BIOS, enable Secure Boot **"Setup Mode"** (clears existing keys)
+3. Save and exit, boot into your new Arch system
 
 ---
 
-### Phase 2: UEFI/BIOS Configuration
+### Phase 2: Secure Boot Configuration
 
-1. In your UEFI/BIOS settings, enable **"Setup Mode"** for Secure Boot
-   - This clears existing keys
-   - Check your motherboard manual for exact steps
-2. Save and exit
-3. Boot into your newly installed Arch system
-
----
-
-### Phase 3: From Installed System
-
-Log in with your created user account and run:
+Boot into your newly installed Arch system, log in, and run:
 
 ```bash
-# 6. Configure Secure Boot
-chmod +x 06-secure-boot.sh
-./06-secure-boot.sh
+cd ~/arch-install
+sudo ./install.sh
 ```
 
-After this script, **reboot** to save Secure Boot settings:
+This configures Secure Boot with custom keys and signs your EFI binaries.
+
+**After Phase 2 completes**, reboot when prompted:
 ```bash
 sudo reboot
 ```
 
 ---
 
-### Phase 4: Final Configuration
+### Phase 3: TPM2 Configuration
 
 Boot back into your system and run:
 
 ```bash
-# 7. Configure TPM2 auto-unlocking
-chmod +x 07-tpm2-setup.sh
-./07-tpm2-setup.sh
+cd ~/arch-install
+sudo ./install.sh
 ```
 
-**Final reboot** to test TPM unlocking:
+This sets up TPM2 automatic disk unlocking (with optional PIN protection).
+
+**After Phase 3 completes**, perform a final reboot to test:
 ```bash
 sudo reboot
+```
+
+---
+
+## Manual Installation (Advanced)
+
+If you prefer to run scripts individually, you can execute them in order:
+
+```bash
+# Phase 1 (from Live ISO)
+./01-disk-preparation.sh
+./02-base-install.sh
+./03-user-setup.sh
+./04-kernel-setup.sh
+./05-bootloader.sh
+
+# Reboot and configure BIOS for Secure Boot Setup Mode
+
+# Phase 2 (from installed system)
+./06-secure-boot.sh
+
+# Reboot
+
+# Phase 3 (from installed system)
+./07-tpm2-setup.sh
 ```
 
 ---
