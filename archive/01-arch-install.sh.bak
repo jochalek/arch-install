@@ -1,0 +1,263 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+EFI_SIZE="2G"
+LOCALE="en_US.UTF-8"         
+KEYMAP="us"
+TIMEZONE="America/Chicago"
+
+################################################################################
+# Prompt for disk, hostname, username
+################################################################################
+echo "Available block devices:"
+echo
+mapfile -t DISKS < <(lsblk -ndo NAME,SIZE,TYPE | grep disk | awk '{print "/dev/"$1}')
+for i in "${!DISKS[@]}"; do
+    SIZE=$(lsblk -ndo SIZE "${DISKS[$i]}")
+    MODEL=$(lsblk -ndo MODEL "${DISKS[$i]}" 2>/dev/null || echo "")
+    echo "  $((i+1))) ${DISKS[$i]} - ${SIZE} ${MODEL}"
+done
+echo
+read -rp "Select disk number: " DISK_NUM
+DISK="${DISKS[$((DISK_NUM-1))]}"
+
+if [[ -z "$DISK" ]]; then
+    echo "Invalid selection. Aborting."
+    exit 1
+fi
+
+read -rp "Enter desired hostname: " HOSTNAME
+read -rp "Enter desired username: " USERNAME
+
+echo "[*] Confirming selections:"
+echo "    Disk:     $DISK"
+echo "    Hostname: $HOSTNAME"
+echo "    Username: $USERNAME"
+read -rp "Proceed with installation? (y/N) " CONFIRM
+[[ "$CONFIRM" =~ ^[Yy]$ ]] || { echo "Aborting."; exit 1; }
+
+################################################################################
+# Partition disk
+################################################################################
+echo "[*] Wiping and partitioning disk using Discoverable Partitions Spec..."
+sgdisk -Z "$DISK"
+sgdisk -n1:0:+${EFI_SIZE} -t1:ef00 -c1:EFI "$DISK"
+sgdisk -N2 -t2:8304 -c2:LINUXROOT "$DISK"
+partprobe "$DISK"
+
+# Determine partition naming scheme
+if [[ "$DISK" =~ nvme ]]; then
+    EFI_PART="${DISK}p1"
+    ROOT_PART="${DISK}p2"
+else
+    EFI_PART="${DISK}1"
+    ROOT_PART="${DISK}2"
+fi
+
+################################################################################
+# LUKS encryption
+################################################################################
+echo "[*] Encrypting $ROOT_PART with LUKS2..."
+cryptsetup luksFormat --type luks2 "$ROOT_PART"
+cryptsetup luksOpen "$ROOT_PART" cryptroot
+
+################################################################################
+# Filesystems & subvolumes
+################################################################################
+mkfs.vfat -F32 -n EFI "$EFI_PART"
+mkfs.btrfs -f -L linuxroot /dev/mapper/cryptroot
+
+mount /dev/mapper/cryptroot /mnt
+btrfs subvolume create /mnt/@
+btrfs subvolume create /mnt/@home
+umount /mnt
+
+mount -o subvol=@,compress=zstd /dev/mapper/cryptroot /mnt
+mkdir /mnt/home
+mount -o subvol=@home,compress=zstd /dev/mapper/cryptroot /mnt/home
+
+mkdir -p /mnt/efi
+mount "$EFI_PART" /mnt/efi
+
+################################################################################
+# Install base system
+################################################################################
+echo "[*] Installing base system..."
+reflector --country US --age 24 --protocol https --sort rate --save /etc/pacman.d/mirrorlist
+pacstrap -K /mnt base base-devel linux-zen linux-firmware amd-ucode \
+    btrfs-progs cryptsetup dosfstools util-linux sbctl git unzip \
+    vim nano ghostty sudo reflector iwd
+
+################################################################################
+# Locale & basic system config
+################################################################################
+sed -i "s/#${LOCALE}/${LOCALE}/" /mnt/etc/locale.gen
+arch-chroot /mnt locale-gen
+echo "$KEYMAP" > /mnt/etc/vconsole.conf
+ln -sf "/usr/share/zoneinfo/${TIMEZONE}" /mnt/etc/localtime
+echo "$HOSTNAME" > /mnt/etc/hostname
+
+cat > /mnt/etc/hosts <<EOF
+127.0.0.1    localhost
+::1          localhost
+127.0.1.1    ${HOSTNAME}.localdomain ${HOSTNAME}
+EOF
+
+################################################################################
+# User setup
+################################################################################
+arch-chroot /mnt useradd -G wheel -m "$USERNAME"
+echo "[*] Set password for $USERNAME:"
+arch-chroot /mnt passwd "$USERNAME"
+echo "[*] Set root password:"
+arch-chroot /mnt passwd
+sed -i '/^# %wheel ALL=(ALL:ALL) NOPASSWD: ALL/s/^# //' /mnt/etc/sudoers
+
+################################################################################
+# Kernel cmdline
+################################################################################
+echo "quiet rw" > /mnt/etc/kernel/cmdline
+
+################################################################################
+# mkinitcpio + UKI preset
+################################################################################
+cat > /mnt/etc/mkinitcpio.conf <<'EOF'
+MODULES=()
+BINARIES=()
+FILES=()
+HOOKS=(base systemd autodetect modconf kms keyboard sd-vconsole sd-encrypt block filesystems fsck)
+EOF
+
+cat > /mnt/etc/mkinitcpio.d/linux-zen.preset <<'EOF'
+ALL_config="/etc/mkinitcpio.conf"
+ALL_kver="/boot/vmlinuz-linux-zen"
+ALL_microcode=(/boot/*-ucode.img)
+PRESETS=('default' 'fallback')
+default_uki="/efi/EFI/Linux/arch-linux-zen.efi"
+default_options="--splash /usr/share/systemd/bootctl/splash-arch.bmp"
+fallback_uki="/efi/EFI/Linux/arch-linux-zen-fallback.efi"
+fallback_options="-S autodetect"
+EOF
+
+mkdir -p /mnt/efi/EFI/Linux
+arch-chroot /mnt mkinitcpio -P
+
+################################################################################
+# Services
+################################################################################
+systemctl --root /mnt enable systemd-resolved systemd-timesyncd iwd
+systemctl --root /mnt enable systemd-networkd
+
+################################################################################
+# Install bootloader (but don't configure Secure Boot yet)
+################################################################################
+arch-chroot /mnt bootctl install --esp-path=/efi
+
+################################################################################
+# Copy post-install script to new system
+################################################################################
+echo "[*] Copying post-install script to new system..."
+cat > /mnt/root/02-post-install.sh <<'POSTINSTALL'
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "=== Arch Linux Post-Install: Secure Boot + TPM2 Setup ==="
+echo
+
+# Find the root partition
+ROOT_PART=$(lsblk -no PKNAME "$(findmnt -no SOURCE /)" | head -1)
+ROOT_PART="/dev/${ROOT_PART}"
+
+################################################################################
+# Secure Boot Setup
+################################################################################
+echo "[*] Checking Secure Boot status..."
+sbctl status
+
+echo
+read -rp "Is Setup Mode enabled? (y/N) " SETUP_MODE
+if [[ ! "$SETUP_MODE" =~ ^[Yy]$ ]]; then
+    echo "[!] ERROR: Secure Boot must be in Setup Mode."
+    echo "    Reboot to firmware, clear/reset Secure Boot keys, then run this script again."
+    exit 1
+fi
+
+echo "[*] Creating and enrolling Secure Boot keys..."
+sbctl create-keys
+sbctl enroll-keys -m
+
+echo "[*] Signing EFI binaries..."
+sbctl sign -s -o /usr/lib/systemd/boot/efi/systemd-bootx64.efi.signed /usr/lib/systemd/boot/efi/systemd-bootx64.efi
+sbctl sign -s /efi/EFI/BOOT/BOOTX64.EFI
+sbctl sign -s /efi/EFI/Linux/arch-linux-zen.efi
+sbctl sign -s /efi/EFI/Linux/arch-linux-zen-fallback.efi
+
+echo "[*] Reinstalling kernel to verify signing..."
+pacman -S --noconfirm linux-zen
+
+################################################################################
+# TPM2 enrollment with PIN + Recovery Key
+################################################################################
+echo
+echo "=== TPM2 LUKS Enrollment ==="
+echo "[!] A recovery key will be generated and displayed — SAVE IT OFFLINE."
+echo
+
+# Generate and store recovery key
+RECOVERY_FILE="/root/tpm2-recovery.txt"
+systemd-cryptenroll "$ROOT_PART" --recovery-key > "$RECOVERY_FILE"
+echo "[!] Recovery Key saved at: $RECOVERY_FILE"
+echo "[!] Printing Recovery Key:"
+cat "$RECOVERY_FILE"
+echo
+
+# Prompt for PIN
+echo "[*] Now enrolling TPM2-bound key WITH PIN."
+echo "[*] When prompted, enter your chosen PIN — it will be required at boot."
+systemd-cryptenroll --tpm2-device=auto --tpm2-pcrs=0+7 --tpm2-with-pin=yes "$ROOT_PART"
+
+################################################################################
+# Done
+################################################################################
+echo
+echo "[*] Post-installation complete!"
+echo
+echo "IMPORTANT:"
+echo "  - Recovery key saved at: $RECOVERY_FILE"
+echo "  - SAVE YOUR RECOVERY KEY OFFLINE NOW!"
+echo "  - Reboot and enable Secure Boot in firmware"
+echo "  - Your system will unlock with TPM2 + PIN"
+echo
+echo "You can now delete this script: rm /root/02-post-install.sh"
+POSTINSTALL
+
+chmod +x /mnt/root/02-post-install.sh
+
+################################################################################
+# Done with initial install
+################################################################################
+echo
+echo "============================================================================"
+echo "[*] Base installation complete!"
+echo "============================================================================"
+echo
+echo "NEXT STEPS:"
+echo
+echo "  1. Remove the installation medium (USB drive)"
+echo "  2. Reboot into your UEFI/BIOS firmware setup:"
+echo "     \$ umount -R /mnt"
+echo "     \$ cryptsetup close cryptroot"
+echo "     \$ systemctl reboot --firmware-setup"
+echo
+echo "  3. In firmware setup:"
+echo "     - Put Secure Boot into 'Setup Mode' (clear/delete all keys)"
+echo "     - Save and exit"
+echo
+echo "  4. Boot into your new Arch Linux system"
+echo
+echo "  5. Log in as root and run:"
+echo "     \$ /root/02-post-install.sh"
+echo
+echo "============================================================================"
+echo
+read -rp "Press Enter to acknowledge..."
