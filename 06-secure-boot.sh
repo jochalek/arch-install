@@ -9,6 +9,12 @@ echo "=== Arch Linux Installation - Part 6: Secure Boot & TPM2 ==="
 echo ""
 
 echo "=== Checking Secure Boot status ==="
+if ! command -v sbctl &> /dev/null; then
+    echo "ERROR: sbctl not found in PATH!"
+    echo "Installing sbctl..."
+    sudo pacman -S --noconfirm sbctl
+fi
+
 sbctl status
 
 echo ""

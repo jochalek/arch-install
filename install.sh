@@ -94,7 +94,7 @@ case "${CURRENT_PHASE}" in
         echo "   - Save and exit"
         echo "4. Boot into your new Arch system"
         echo "5. Log in with the user account you created"
-        echo "6. Run: cd ~/arch-install && sudo ./install.sh"
+        echo "6. Run: sudo /root/arch-install/install.sh"
         echo ""
         read -p "Press Enter to acknowledge..."
         ;;
@@ -129,7 +129,7 @@ case "${CURRENT_PHASE}" in
         echo -e "${GREEN}NEXT STEPS:${NC}"
         echo "1. Run: sudo reboot"
         echo "2. After reboot, log back in"
-        echo "3. Run: cd ~/arch-install && sudo ./install.sh"
+        echo "3. Run: sudo /root/arch-install/install.sh"
         echo ""
         read -p "Press Enter to acknowledge..."
         ;;

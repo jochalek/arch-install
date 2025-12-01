@@ -8,7 +8,7 @@ echo "=== Arch Linux Installation - Part 5: Services & Bootloader ==="
 echo ""
 
 echo "=== Enabling system services ==="
-systemctl --root /mnt enable systemd-resolved systemd-timesyncd NetworkManager
+systemctl --root /mnt enable systemd-resolved systemd-timesyncd iwd
 systemctl --root /mnt mask systemd-networkd
 
 echo ""
