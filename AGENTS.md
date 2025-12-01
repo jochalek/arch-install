@@ -7,14 +7,16 @@
 - **Test in VM**: Boot Arch ISO, clone repo, run `./install.sh`, follow prompts through all 3 phases
 
 ## Code Style
-- **Structure**: Bash with `#!/bin/bash` shebang, `set -e` at top, header comment with part number and "For Chicago, USA timezone with Zen kernel"
-- **Variables**: UPPERCASE for user-configurable (DISK, USERNAME, PART1), always double-quote: `"${VAR}"`
-- **Error Handling**: Explicit confirmation prompts before destructive ops (`read -p "Are you sure? (yes/no): "`), exit with clear error messages
-- **Formatting**: Echo progress with `===` delimiters, blank lines between sections, completion messages with next steps
-- **Naming**: Descriptive variable names matching purpose, avoid single-letter vars except loop counters
+- **Structure**: Bash with `#!/bin/bash` shebang, `set -e` immediately after, header comment with part number and "For Chicago, USA timezone with Zen kernel"
+- **Variables**: UPPERCASE for user-configurable (DISK, USERNAME, PART1), always double-quote: `"${VAR}"`, use descriptive names
+- **User Input**: Validate destructive operations with `read -p "Are you sure? (yes/no): " CONFIRM` then check `[ "$CONFIRM" != "yes" ]` to exit
+- **Chroot Operations**: Use `arch-chroot /mnt <command>` pattern for commands executed in the installed system (Phase 1 scripts only)
+- **Formatting**: Echo progress with `=== Section Name ===`, blank lines between sections, clear completion messages with next steps
+- **Error Handling**: Exit with descriptive error messages, check prerequisites (e.g., `if ! command -v sbctl &> /dev/null`), use `set -e` for automatic error exits
 
 ## Key Conventions
-- Scripts are sequential installation steps requiring live Arch environment (no unit tests)
-- Each script checks prerequisites and provides clear instructions for next phase
-- Color codes: RED for errors, GREEN for success, YELLOW for warnings (in install.sh)
-- State tracking via `/tmp/arch-install-state` and `/root/arch-install/.install-state`
+- Scripts are sequential installation steps requiring live Arch environment (no unit tests possible)
+- Each script provides clear instructions for next phase at completion
+- Color codes (install.sh only): `RED='\033[0;31m'` for errors, `GREEN='\033[0;32m'` for success, `YELLOW='\033[1;33m'` for warnings
+- State tracking via `/tmp/arch-install-state` (Phase 1) and `/root/arch-install/.install-state` (Phases 2-3)
+- Partition naming logic: detect nvme/mmcblk devices and append 'p' (`${DISK}p1`) vs standard devices (`${DISK}1`)

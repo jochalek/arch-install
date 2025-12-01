@@ -45,7 +45,7 @@ copy_to_installed_system() {
     mkdir -p /mnt/root/arch-install
     cp "${SCRIPT_DIR}"/*.sh /mnt/root/arch-install/
     chmod +x /mnt/root/arch-install/*.sh
-    echo "${CURRENT_PHASE}" > /mnt/root/arch-install/.install-state
+    echo "PHASE2" > /mnt/root/arch-install/.install-state
     echo "Scripts copied to /root/arch-install/"
 }
 
