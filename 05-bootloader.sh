@@ -8,8 +8,30 @@ echo "=== Arch Linux Installation - Part 5: Services & Bootloader ==="
 echo ""
 
 echo "=== Enabling system services ==="
-systemctl --root /mnt enable systemd-resolved systemd-timesyncd iwd
-systemctl --root /mnt mask systemd-networkd
+systemctl --root /mnt enable systemd-resolved systemd-timesyncd systemd-networkd iwd
+
+echo ""
+echo "=== Configuring systemd-networkd for DHCP ==="
+mkdir -p /mnt/etc/systemd/network
+
+# Wired network configuration
+cat > /mnt/etc/systemd/network/20-wired.network << 'EOF'
+[Match]
+Name=en* eth*
+
+[Network]
+DHCP=yes
+EOF
+
+# Wireless network configuration
+cat > /mnt/etc/systemd/network/25-wireless.network << 'EOF'
+[Match]
+Name=wl*
+
+[Network]
+DHCP=yes
+IgnoreCarrierLoss=3s
+EOF
 
 echo ""
 echo "=== Installing systemd-boot bootloader ==="
