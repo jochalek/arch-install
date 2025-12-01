@@ -14,7 +14,7 @@ reflector --country US --age 24 --protocol http,https --sort rate --save /etc/pa
 echo ""
 echo "=== Installing base system with Zen kernel ==="
 # Note: Installing zen kernel and zen kernel headers
-pacstrap -K /mnt base base-devel linux-zen linux-zen-headers linux-firmware intel-ucode amd-ucode vim nano cryptsetup btrfs-progs dosfstools util-linux git unzip sbctl kitty networkmanager sudo
+pacstrap -K /mnt base base-devel linux-zen linux-zen-headers linux-firmware intel-ucode amd-ucode vim nano cryptsetup btrfs-progs dosfstools util-linux git unzip sbctl ghostty iwd impala sudo
 
 echo ""
 echo "=== Configuring locale settings for US ==="
@@ -22,15 +22,21 @@ echo "=== Configuring locale settings for US ==="
 sed -i -e "/^#en_US.UTF-8/s/^#//" /mnt/etc/locale.gen
 
 echo ""
-echo "=== Running systemd-firstboot ==="
-echo "Please configure your system when prompted:"
-echo "  - Keymap: us (for US keyboard)"
-echo "  - Timezone: America/Chicago"
-echo "  - Hostname: choose a name for your computer"
+echo "=== Configuring system settings ==="
+echo "Default settings: Keymap=us, Timezone=America/Chicago, Locale=en_US.UTF-8"
 echo ""
-read -p "Press Enter to continue..."
+read -p "Do you want to use different settings? (yes/no): " CUSTOM_SETTINGS
 
-systemd-firstboot --root /mnt --prompt
+if [ "$CUSTOM_SETTINGS" = "yes" ]; then
+    echo ""
+    echo "Please configure your custom settings when prompted:"
+    systemd-firstboot --root /mnt --prompt
+else
+    echo ""
+    echo "Using default Chicago/USA settings..."
+    echo "You will only be prompted for hostname."
+    systemd-firstboot --root /mnt --keymap=us --timezone=America/Chicago --locale=en_US.UTF-8 --prompt-hostname
+fi
 
 # Generate locales
 echo ""
