@@ -8,13 +8,16 @@ Adapted for **Chicago, USA** timezone with the **Zen kernel**.
 ## Quick Start
 
 1. Boot from the latest Arch Linux ISO
-2. Verify internet connectivity: `ping archlinux.org`
-3. If using WiFi: `iwctl` to connect
-4. Download and run the installer:
+2. WiFi: `iwctl` to connect
+3. Verify internet connectivity: `ping archlinux.org`
+4. Set a root password to SSH `systemctl enable sshd && passwd`
+5. Download and run the installer:
 
 ```bash
+# Install git
+pacman -Sy git
 # Clone or download the repository
-git clone https://github.com/yourusername/arch-install.git
+git clone https://github.com/jochalek/arch-install.git
 cd arch-install
 
 # Run the unified installer

@@ -8,6 +8,12 @@ echo "=== Arch Linux Installation - Part 1: Disk Preparation ==="
 echo "This script will prepare your disk for installation"
 echo ""
 
+# Enable NTP for time synchronization
+echo "=== Enabling NTP time synchronization ==="
+timedatectl set-ntp true
+echo "System clock synchronized"
+echo ""
+
 # Find and display available disks
 echo "Available disks:"
 lsblk -d -o NAME,SIZE,TYPE | grep disk
